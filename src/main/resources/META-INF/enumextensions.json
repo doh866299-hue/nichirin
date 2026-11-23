@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "enum": "net/minecraft/client/model/HumanoidModel$ArmPose",
+      "name": "NICHIRIN_KATANA",
+      "constructor": "(ZZLnet/neoforged/neoforge/client/IArmPoseTransformer;)V",
+      "parameters": {
+        "class": "com/nichirin/client/anim/KatanaArmPose",
+        "field": "KATANA_POSE_PROXY"
+      }
+    }
+  ]
+}

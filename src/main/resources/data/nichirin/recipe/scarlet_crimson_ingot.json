@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " S ",
+    "SDS",
+    " S "
+  ],
+  "key": {
+    "S": "nichirin:scarlet_crimson_iron_sand",
+    "D": "minecraft:diamond"
+  },
+  "result": {
+    "id": "nichirin:scarlet_crimson_ingot",
+    "count": 1
+  }
+}

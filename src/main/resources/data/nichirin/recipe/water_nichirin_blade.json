@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "  I",
+    "LI ",
+    "SL "
+  ],
+  "key": {
+    "I": "nichirin:scarlet_crimson_ingot",
+    "L": "minecraft:lapis_block",
+    "S": "minecraft:stick"
+  },
+  "result": {
+    "id": "nichirin:water_nichirin_blade",
+    "count": 1
+  }
+}

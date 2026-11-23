@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " R ",
+    "IQI",
+    " L "
+  ],
+  "key": {
+    "R": "minecraft:redstone",
+    "I": "minecraft:iron_ingot",
+    "Q": "minecraft:quartz",
+    "L": "minecraft:lapis_lazuli"
+  },
+  "result": {
+    "id": "nichirin:scarlet_crimson_iron_sand",
+    "count": 2
+  }
+}

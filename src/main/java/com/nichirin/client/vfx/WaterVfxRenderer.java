@@ -248,6 +248,7 @@ public final class WaterVfxRenderer {
                 && WaterVfxManager.STREAKS.isEmpty()
                 && WaterVfxManager.THREAD_SNAPS.isEmpty()
                 && WaterVfxManager.RIPPLE_RINGS.isEmpty()
+                && WaterVfxManager.AFTERIMAGES.isEmpty()
                 && WaterVfxManager.getOpeningThreadTargetId() <= 0) {
             return;
         }
@@ -455,9 +456,17 @@ public final class WaterVfxRenderer {
             ));
         }
 
+        List<AfterimageSnap> afterimages = new ArrayList<>(WaterVfxManager.AFTERIMAGES.size());
+        for (WaterVfxManager.SunAfterimageVfx ai : WaterVfxManager.AFTERIMAGES) {
+            afterimages.add(new AfterimageSnap(
+                    ai.x, ai.y, ai.z, ai.facingYaw, ai.evadeYaw, ai.scale,
+                    Mth.clamp((ai.age + pt) / ai.maxAge, 0.0F, 1.0F), ai.age + pt
+            ));
+        }
+
         event.getRenderState().setRenderData(VFX_STATE_KEY, new VfxSnapshot(
                 bladeTrails, blocks, whirlpools, waterfalls, dragons, sunFinales, deadCalms, rifts, auras, foams, streaks,
-                openingThread, threadSnaps, ripples, firstPerson, camForward
+                openingThread, threadSnaps, ripples, afterimages, firstPerson, camForward
         ));
     }
 
@@ -605,13 +614,15 @@ public final class WaterVfxRenderer {
         }
         boolean hasSunDiscs = snap.deadCalms.stream().anyMatch(d -> d.sunStyle)
                 || snap.auras.stream().anyMatch(a -> a.sunStyle)
-                || snap.sunFinales.stream().anyMatch(s -> s.sunStyle);
+                || snap.sunFinales.stream().anyMatch(s -> s.sunStyle)
+                || snap.ripples.stream().anyMatch(r -> r.sunStyle);
         if (hasSunDiscs) {
             collector.submitCustomGeometry(poseStack, SUN_HALO_MIRROR_TYPE, (pose, vc) -> {
                 Matrix4fc mat = pose.pose();
                 for (DeadCalmSnap dc : snap.deadCalms) if (dc.sunStyle) renderDeadCalmMirror(mat, vc, dc, camX, camY, camZ);
                 for (ChargeAuraSnap c : snap.auras) if (c.sunStyle) renderChargeGroundDisc(mat, vc, c, camX, camY, camZ);
                 for (SunFinaleSnap sf : snap.sunFinales) if (sf.sunStyle) renderSunFinaleInnerHalo(mat, vc, sf, camX, camY, camZ);
+                for (RippleRingSnap rr : snap.ripples) if (rr.sunStyle) renderRippleRing(mat, vc, rr, camX, camY, camZ);
             });
         }
 
@@ -630,14 +641,16 @@ public final class WaterVfxRenderer {
             });
         }
 
-        // ====== Pass 7: 极锐利刀锋核心斩光刃 + 方向拉伸高速细水针 + 雫波纹清冽水光环 + 鬼灭「隙之线」 ======
+        // ====== Pass 7: 极锐利刀锋核心斩光刃 + 高速细水针/火星 + 冲击环缘 + 鬼灭「隙之线」 + 日·幻日虹 3D 虹光残像 ======
         if (!snap.bladeTrails.isEmpty() || !snap.streaks.isEmpty()
-                || snap.openingThread != null || !snap.threadSnaps.isEmpty() || !snap.ripples.isEmpty()) {
+                || snap.openingThread != null || !snap.threadSnaps.isEmpty()
+                || !snap.ripples.isEmpty() || !snap.afterimages.isEmpty()) {
             collector.submitCustomGeometry(poseStack, RenderTypes.lightning(), (pose, vc) -> {
                 Matrix4fc mat = pose.pose();
                 for (BladeTrailSnap tr : snap.bladeTrails) renderBladeCoreEdge(mat, vc, tr, camX, camY, camZ);
                 for (StreakSnap st : snap.streaks) renderVelocityStreak(mat, vc, st, camX, camY, camZ);
                 for (RippleRingSnap rr : snap.ripples) renderRippleRingHighlight(mat, vc, rr, camX, camY, camZ);
+                for (AfterimageSnap ai : snap.afterimages) renderSunAfterimage(mat, vc, ai, camX, camY, camZ);
                 if (snap.openingThread != null) {
                     renderOpeningThread(mat, vc, snap.openingThread, camX, camY, camZ, camRight, camUp);
                 }
@@ -1636,8 +1649,11 @@ public final class WaterVfxRenderer {
             Matrix4fc mat, VertexConsumer vc, RippleRingSnap rr, double camX, double camY, double camZ
     ) {
         float cx = (float) (rr.x - camX), cy = (float) (rr.y - camY), cz = (float) (rr.z - camZ);
+        float cr = rr.sunStyle ? 1.00F : 0.88F;
+        float cg = rr.sunStyle ? 0.84F : 0.98F;
+        float cb = rr.sunStyle ? 0.56F : 1.00F;
         if (rr.mode == 0) {
-            // 柒之型·雫波纹突刺：垂直于刺击矢量展开的 3 层立体同心水滴波纹！
+            // 水·雫波纹突刺 / 日·阳华突：垂直于刺击矢量展开的 3 层立体同心冲击环！
             Vec3 normal = Vec3.directionFromRotation(rr.pitchDeg, rr.yawDeg).normalize();
             Vec3[] basis = orthoBasis(normal);
             Vec3 uAxis = basis[0], vAxis = basis[1];
@@ -1652,10 +1668,10 @@ public final class WaterVfxRenderer {
                 float oy = cy - (float) normal.y * offAlong;
                 float oz = cz - (float) normal.z * offAlong;
                 drawOrientedTexturedQuad(mat, vc, ox, oy, oz, uAxis, vAxis, rad,
-                        rr.ageTicks * (0.06F + ring * 0.03F), 0.88F, 0.98F, 1.0F, alpha);
+                        rr.ageTicks * (0.06F + ring * 0.03F), cr, cg, cb, alpha);
             }
         } else if (rr.mode == 1) {
-            // 贴地水压激浪冲击波纹（泷壶 / 生生流转水爆 / 漩涡收尾 / 打潮拍岸 / 水流飞沫踏水）
+            // 贴地水压 / 日炎冲击波纹
             for (int ring = 0; ring < 2; ring++) {
                 float localP = Mth.clamp((rr.progress - ring * 0.14F) / (1.0F - ring * 0.14F), 0.0F, 1.0F);
                 if (localP <= 0.01F || localP >= 0.99F) continue;
@@ -1663,7 +1679,7 @@ public final class WaterVfxRenderer {
                 float rad = rr.maxRadius * (0.22F + ease * (0.86F - ring * 0.16F));
                 float alpha = (1.0F - localP) * (1.0F - localP) * (ring == 0 ? 0.88F : 0.65F);
                 drawHorizontalTexturedQuad(mat, vc, cx, cy + 0.06F + ring * 0.04F, cz, rad,
-                        rr.ageTicks * (ring == 0 ? 0.05F : -0.04F), 0.88F, 0.98F, 1.0F, alpha);
+                        rr.ageTicks * (ring == 0 ? 0.05F : -0.04F), cr, cg, cb, alpha);
             }
         } else {
             // 伍之型·乾天的慈雨：柔和银青浮空同心细雨涟漪
@@ -1674,7 +1690,7 @@ public final class WaterVfxRenderer {
         }
     }
 
-    /** Pass 7：为柒之型·雫波纹突刺与水压冲击环叠加极锐利的一闪清亮水光环缘！ */
+    /** Pass 7：为雫波纹突刺 / 日·阳华突与冲击环叠加极锐利的一闪清亮/炽金光环缘！ */
     private static void renderRippleRingHighlight(
             Matrix4fc mat, VertexConsumer vc, RippleRingSnap rr, double camX, double camY, double camZ
     ) {
@@ -1699,6 +1715,12 @@ public final class WaterVfxRenderer {
         float halfW = (rr.mode == 0 ? 0.11F : 0.15F) * (1.0F - rr.progress * 0.65F);
         float rIn = Math.max(0.06F, rMid - halfW);
         float rOut = rMid + halfW;
+        float inR = rr.sunStyle ? 1.00F : 0.45F;
+        float inG = rr.sunStyle ? 0.46F : 0.90F;
+        float inB = rr.sunStyle ? 0.08F : 1.00F;
+        float outR = rr.sunStyle ? 1.00F : 0.94F;
+        float outG = rr.sunStyle ? 0.94F : 0.99F;
+        float outB = rr.sunStyle ? 0.66F : 1.00F;
         int segs = 24;
         for (int i = 0; i < segs; i++) {
             float a0 = (Mth.TWO_PI * i) / segs;
@@ -1706,10 +1728,10 @@ public final class WaterVfxRenderer {
             Vec3 d0 = uAxis.scale(Mth.cos(a0)).add(vAxis.scale(Mth.sin(a0)));
             Vec3 d1 = uAxis.scale(Mth.cos(a1)).add(vAxis.scale(Mth.sin(a1)));
             emitColorQuad(mat, vc,
-                    cx + (float) d0.x * rIn,  cy + (float) d0.y * rIn,  cz + (float) d0.z * rIn,  0.45F, 0.90F, 1.0F, alpha * 0.25F,
-                    cx + (float) d0.x * rOut, cy + (float) d0.y * rOut, cz + (float) d0.z * rOut, 0.94F, 0.99F, 1.0F, alpha,
-                    cx + (float) d1.x * rOut, cy + (float) d1.y * rOut, cz + (float) d1.z * rOut, 0.94F, 0.99F, 1.0F, alpha,
-                    cx + (float) d1.x * rIn,  cy + (float) d1.y * rIn,  cz + (float) d1.z * rIn,  0.45F, 0.90F, 1.0F, alpha * 0.25F);
+                    cx + (float) d0.x * rIn,  cy + (float) d0.y * rIn,  cz + (float) d0.z * rIn,  inR,  inG,  inB,  alpha * 0.28F,
+                    cx + (float) d0.x * rOut, cy + (float) d0.y * rOut, cz + (float) d0.z * rOut, outR, outG, outB, alpha,
+                    cx + (float) d1.x * rOut, cy + (float) d1.y * rOut, cz + (float) d1.z * rOut, outR, outG, outB, alpha,
+                    cx + (float) d1.x * rIn,  cy + (float) d1.y * rIn,  cz + (float) d1.z * rIn,  inR,  inG,  inB,  alpha * 0.28F);
         }
     }
 
@@ -1730,51 +1752,40 @@ public final class WaterVfxRenderer {
     }
 
     /**
-     * Pass 5C：日之呼吸落点 焦土熔岩神龙图腾（刀劈瞬间铺满落点，脉动余烬！）
+     * Pass 5C：日之呼吸·日晕之龙终结落点 干脆利落的短促焦热余烬灼印（22 tick 快速消散，绝不残留怪异地面法阵！）
      */
     private static void renderSunFinaleCraterTotem(
             Matrix4fc mat, VertexConsumer vc, SunFinaleSnap sf, double camX, double camY, double camZ
     ) {
         float ageT = sf.ageTicks;
-        float openP = Mth.clamp(ageT / 4.2F, 0.0F, 1.0F);
+        if (ageT >= 24.0F) return;
+        float openP = Mth.clamp(ageT / 3.5F, 0.0F, 1.0F);
         float easeOut = 1.0F - (1.0F - openP) * (1.0F - openP);
-        float radius = sf.radius * Mth.lerp(easeOut, 0.42F, 1.32F);
-        float fadeStart = Math.max(34.0F, sf.maxAge - 18.0F);
-        float fadeOut = 1.0F - Mth.clamp((ageT - fadeStart) / Math.max(1.0F, sf.maxAge - fadeStart), 0.0F, 1.0F);
-        float alpha = fadeOut * fadeOut;
+        float radius = sf.radius * Mth.lerp(easeOut, 0.36F, 1.08F);
+        float fadeOut = 1.0F - Mth.clamp((ageT - 9.0F) / 15.0F, 0.0F, 1.0F);
+        float alpha = fadeOut * fadeOut * 0.85F;
         if (alpha <= 0.02F) return;
 
-        float pulse = ageT >= 4.2F ? (0.91F + 0.09F * Mth.sin(ageT * 0.28F)) : 1.0F;
         float cx = (float) (sf.x - camX), cy = (float) (sf.y - camY) + 0.055F, cz = (float) (sf.z - camZ);
-        float baseRot = sf.yawDeg * Mth.DEG_TO_RAD;
-        drawHorizontalTexturedQuad(mat, vc, cx, cy, cz, radius, baseRot,
-                pulse, pulse * 0.96F, pulse * 0.90F, 0.96F * alpha);
+        drawHorizontalTexturedQuad(mat, vc, cx, cy, cz, radius, sf.yawDeg * Mth.DEG_TO_RAD, 1.0F, 0.92F, 0.78F, alpha);
     }
 
     /**
-     * Pass 5B：落点 12 芒炽金旋转日轮圣纹
+     * Pass 5B：日之呼吸落点 瞬闪扩散日轮热浪环（18 tick 干脆收束！）
      */
     private static void renderSunFinaleInnerHalo(
             Matrix4fc mat, VertexConsumer vc, SunFinaleSnap sf, double camX, double camY, double camZ
     ) {
         float ageT = sf.ageTicks;
-        float fadeStart = Math.max(28.0F, sf.maxAge - 20.0F);
-        float fadeOut = 1.0F - Mth.clamp((ageT - fadeStart) / Math.max(1.0F, sf.maxAge - fadeStart - 2.0F), 0.0F, 1.0F);
-        if (fadeOut <= 0.02F) return;
+        if (ageT >= 18.0F) return;
+        float rp = ageT / 18.0F;
+        float ease = 1.0F - (1.0F - rp) * (1.0F - rp);
+        float alpha = (1.0F - rp) * (1.0F - rp) * 0.88F;
+        if (alpha <= 0.02F) return;
 
-        float cx = (float) (sf.x - camX), cy = (float) (sf.y - camY) + 0.095F, cz = (float) (sf.z - camZ);
-        float p = Mth.clamp(ageT / 4.5F, 0.0F, 1.0F);
-        float ease = 1.0F - (1.0F - p) * (1.0F - p);
-        float mainR = sf.radius * Mth.lerp(ease, 0.36F, 0.86F);
-        float rot = ageT * 0.032F;
-        drawHorizontalTexturedQuad(mat, vc, cx, cy, cz, mainR, rot, 1.0F, 0.95F, 0.84F, 0.86F * fadeOut);
-
-        if (ageT < 18.0F) {
-            float rp = ageT / 18.0F;
-            float echoR = sf.radius * (0.45F + rp * 0.92F);
-            float echoA = Mth.sin(rp * Mth.PI) * 0.58F;
-            drawHorizontalTexturedQuad(mat, vc, cx, cy + 0.025F, cz, echoR, -rot * 1.4F, 1.0F, 0.88F, 0.65F, echoA);
-        }
+        float cx = (float) (sf.x - camX), cy = (float) (sf.y - camY) + 0.085F, cz = (float) (sf.z - camZ);
+        float mainR = sf.radius * (0.34F + ease * 0.96F);
+        drawHorizontalTexturedQuad(mat, vc, cx, cy, cz, mainR, ageT * 0.06F, 1.0F, 0.90F, 0.65F, alpha);
     }
 
     /**
@@ -1799,12 +1810,15 @@ public final class WaterVfxRenderer {
     private static void renderWaterfallGlow(
             Matrix4fc mat, VertexConsumer vc, WaterfallSnap wf, double camX, double camY, double camZ
     ) {
-        // 捌之型·泷壶：仅保留落点贴地柔和清冽水光，彻底取消向上喷射的垂直光柱！
+        // 捌之型·泷壶 / 日·辉辉恩光：仅保留落点贴地柔和光晕，彻底取消向上喷射的垂直光柱！
         float fade = 1.0F - Mth.clamp(wf.progress / 0.72F, 0.0F, 1.0F);
         if (fade <= 0.03F) return;
         float cx = (float) (wf.x - camX), cy = (float) (wf.y - camY) + 0.14F, cz = (float) (wf.z - camZ);
         float r = wf.radius * (0.35F + wf.progress * 0.78F);
-        drawHorizontalTexturedQuad(mat, vc, cx, cy, cz, r, wf.ageTicks * 0.06F, 0.28F, 0.82F, 1.00F, 0.22F * fade);
+        float gr = wf.sunStyle ? 1.00F : 0.28F;
+        float gg = wf.sunStyle ? 0.44F : 0.82F;
+        float gb = wf.sunStyle ? 0.08F : 1.00F;
+        drawHorizontalTexturedQuad(mat, vc, cx, cy, cz, r, wf.ageTicks * 0.06F, gr, gg, gb, (wf.sunStyle ? 0.34F : 0.22F) * fade);
     }
 
     private static void renderWhirlpoolGlow(
@@ -2054,6 +2068,77 @@ public final class WaterVfxRenderer {
         }
     }
 
+    /**
+     * Pass 7E：日·幻日虹 3D 炽热虹光剑士残像（原地留下随热浪微颤的双层虹彩剑士剪影与举刀光锋，随寿命如阳炎消散！）
+     */
+    private static void renderSunAfterimage(
+            Matrix4fc mat, VertexConsumer vc, AfterimageSnap ai, double camX, double camY, double camZ
+    ) {
+        float fade = (ai.progress < 0.12F ? ai.progress / 0.12F : 1.0F)
+                * (1.0F - Mth.clamp((ai.progress - 0.55F) / 0.45F, 0.0F, 1.0F));
+        if (fade <= 0.02F) return;
+
+        Vec3 fwd = Vec3.directionFromRotation(0.0F, ai.facingYaw).normalize();
+        Vec3 right = new Vec3(-fwd.z, 0.0, fwd.x).normalize();
+        Vec3 up = new Vec3(0.0, 1.0, 0.0);
+        Vec3 evadeDir = Vec3.directionFromRotation(0.0F, ai.evadeYaw).normalize();
+
+        // 2 层虹彩错位残影：内层炽红金核心 + 外层微偏虹色棱镜光晕（致敬 ufotable 游郭篇「幻日虹」折射特效！）
+        for (int layer = 0; layer < 2; layer++) {
+            float shim = Mth.sin(ai.ageTicks * 0.95F + layer * 1.8F) * 0.055F;
+            double shift = (layer == 0 ? 0.0 : 0.22 + ai.progress * 0.35);
+            Vec3 root = new Vec3(
+                    ai.x + evadeDir.x * shift + right.x * shim,
+                    ai.y + ai.progress * 0.12,
+                    ai.z + evadeDir.z * shift + right.z * shim
+            );
+            float lr = layer == 0 ? 1.00F : 1.00F;
+            float lg = layer == 0 ? 0.48F : 0.82F;
+            float lb = layer == 0 ? 0.12F : 0.95F; // 外层带一抹虹彩偏紫蓝折射光
+            float a = (layer == 0 ? 0.72F : 0.42F) * fade;
+            float s = ai.scale;
+
+            // 头部、躯干、双腿、斜举日轮刀光刃剪影
+            Vec3 hip = root.add(up.scale(0.84 * s));
+            Vec3 chest = root.add(up.scale(1.42 * s));
+            Vec3 headTop = root.add(up.scale(1.86 * s));
+            emitSilkSegment(mat, vc, root.add(right.scale(-0.16 * s)), hip.add(right.scale(-0.11 * s)), camX, camY, camZ, 0.11F * s, lr, lg, lb, a * 0.55F, a);
+            emitSilkSegment(mat, vc, root.add(right.scale(0.16 * s)), hip.add(right.scale(0.11 * s)), camX, camY, camZ, 0.11F * s, lr, lg, lb, a * 0.55F, a);
+            emitSilkSegment(mat, vc, hip, chest, camX, camY, camZ, 0.22F * s, lr, lg, lb, a, a * 0.92F);
+            emitSilkSegment(mat, vc, chest, headTop, camX, camY, camZ, 0.17F * s, 1.00F, 0.88F, 0.58F, a, a * 0.82F);
+
+            // 斜举日轮刀残影光锋
+            Vec3 hand = chest.add(right.scale(0.32 * s)).add(fwd.scale(0.28 * s)).add(up.scale(-0.12 * s));
+            Vec3 bladeTip = hand.add(fwd.scale(1.25 * s)).add(right.scale(-0.42 * s)).add(up.scale(0.58 * s));
+            emitSilkSegment(mat, vc, hand, bladeTip, camX, camY, camZ, 0.048F * s, 1.00F, 0.92F, 0.65F, a * 0.95F, a * 0.25F);
+        }
+
+        // 脚下与腰际环绕 2 道旋转虹彩热浪环
+        float cx = (float) (ai.x - camX), cy = (float) (ai.y - camY), cz = (float) (ai.z - camZ);
+        int segs = 16;
+        for (int rIdx = 0; rIdx < 2; rIdx++) {
+            float rad = (0.58F + rIdx * 0.34F) * ai.scale + ai.progress * 0.32F;
+            float ry = cy + 0.18F + rIdx * 0.82F + Mth.sin(ai.ageTicks * 0.35F + rIdx) * 0.08F;
+            float rot = ai.ageTicks * (rIdx == 0 ? 0.18F : -0.14F);
+            float ra = 0.58F * fade;
+            for (int i = 0; i < segs; i++) {
+                float a0 = (Mth.TWO_PI * i) / segs + rot;
+                float a1 = (Mth.TWO_PI * (i + 1)) / segs + rot;
+                float c0 = Mth.cos(a0), s0 = Mth.sin(a0), c1 = Mth.cos(a1), s1 = Mth.sin(a1);
+                // 环面随角度呈现火红→炽金→青虹的太阳晕彩虹色！
+                float hue = (i / (float) segs);
+                float cr = 1.00F;
+                float cg = 0.42F + 0.52F * Mth.sin(hue * Mth.PI);
+                float cb = 0.14F + 0.72F * Math.max(0.0F, Mth.sin(hue * Mth.TWO_PI));
+                emitColorQuad(mat, vc,
+                        cx + c0 * rad, ry - 0.03F, cz + s0 * rad, cr, cg, cb, ra,
+                        cx + c0 * rad, ry + 0.05F, cz + s0 * rad, 1.00F, 0.96F, 0.80F, ra * 0.85F,
+                        cx + c1 * rad, ry + 0.05F, cz + s1 * rad, 1.00F, 0.96F, 0.80F, ra * 0.85F,
+                        cx + c1 * rad, ry - 0.03F, cz + s1 * rad, cr, cg, cb, ra);
+            }
+        }
+    }
+
     private static void emitSilkSegment(
             Matrix4fc mat, VertexConsumer vc, Vec3 a, Vec3 b, double camX, double camY, double camZ,
             float halfW, float r, float g, float bl, float a0, float a1
@@ -2256,6 +2341,7 @@ public final class WaterVfxRenderer {
             OpeningThreadSnap openingThread,
             List<ThreadSnapData> threadSnaps,
             List<RippleRingSnap> ripples,
+            List<AfterimageSnap> afterimages,
             boolean firstPerson,
             Vec3 camForward
     ) {}
@@ -2322,5 +2408,9 @@ public final class WaterVfxRenderer {
     private record RippleRingSnap(
             double x, double y, double z, float yawDeg, float pitchDeg, float maxRadius,
             int mode, float progress, float ageTicks, boolean sunStyle
+    ) {}
+
+    private record AfterimageSnap(
+            double x, double y, double z, float facingYaw, float evadeYaw, float scale, float progress, float ageTicks
     ) {}
 }

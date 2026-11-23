@@ -66,6 +66,10 @@ public record WaterVfxPayload(
     public static final byte KIND_SPLASH_STEP = 19;
     /** 20: 拾之型·生生流转 动态回旋叠势进阶（param1=当前圈数1..4, param2=本圈时长ticks, param3=速度倍率） */
     public static final byte KIND_DRAGON_SPIN_STAGE = 20;
+    /** 21: 日·幻日虹 3D 炽热虹光残像留影（x,y,z=残像立身位置, yaw=面朝角度, param1=闪避偏移方向yaw, param2=规模） */
+    public static final byte KIND_SUN_AFTERIMAGE = 21;
+    /** 22: 日之呼吸专属剑型动作与炽焰演出统一包（param1=BladeKinematics animType 17..23, param2=范围半径, param3=子阶段/变体） */
+    public static final byte KIND_SUN_FORM_VFX = 22;
 
     /** 标志位：全集中·常中强化状态 */
     public static final byte FLAG_TOTAL_CONCENTRATION = 1;

@@ -35,6 +35,13 @@ public final class SwordChoreography {
     public static final int ANIM_DROP_RIPPLE_THRUST = 14;
     public static final int ANIM_SPLASH_FLOW = 15;
     public static final int ANIM_WATERFALL_CLEAVE = 16;
+    public static final int ANIM_SUN_CLEAR_BLUE_SKY = 17;
+    public static final int ANIM_SUN_RAGING_SUN = 18;
+    public static final int ANIM_SUN_SETTING_SUN = 19;
+    public static final int ANIM_SUN_HEAT_HAZE = 20;
+    public static final int ANIM_SUN_FLAME_DANCE = 21;
+    public static final int ANIM_SUN_HALO_DRAGON_DASH = 22;
+    public static final int ANIM_SUN_DANCING_FLASH = 23;
 
     private static final Map<Integer, PlayerSwordAnim> ANIMS = new ConcurrentHashMap<>();
 
@@ -566,6 +573,105 @@ public final class SwordChoreography {
                     }
                     return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
                 }
+                case ANIM_SUN_CLEAR_BLUE_SKY -> {
+                    // 日·碧罗之天：压低刀锋由下而上逆向 360° 垂直大炎轮升天挑斩！
+                    float u = t < 0.10F ? 0.0F : snapOut((t - 0.10F) / 0.90F);
+                    tx = -0.14F + Mth.sin(u * Mth.TWO_PI) * 0.16F + biteVib;
+                    ty = -0.12F + Mth.sin(u * Mth.PI) * 0.42F;
+                    tz = -0.26F;
+                    rx = -115.0F + u * 365.0F;
+                    ry = 12.0F;
+                    rz = 14.0F * Mth.sin(u * Mth.TWO_PI);
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
+                case ANIM_SUN_RAGING_SUN -> {
+                    // 日·烈日红镜：左右「∞」字高速交叉双弧烈焰斩！
+                    if (t < 0.50F) {
+                        float u = whipCurve(Mth.clamp((t - 0.08F) / 0.40F, 0.0F, 1.0F));
+                        tx = Mth.lerp(u, 0.44F, -0.78F) + biteVib;
+                        ty = -0.06F + Mth.sin(u * Mth.TWO_PI) * 0.20F;
+                        tz = -0.32F;
+                        rx = -84.0F;
+                        ry = Mth.lerp(u, -94.0F, 108.0F);
+                        rz = Mth.lerp(u, -46.0F, 68.0F);
+                    } else {
+                        float u = whipCurve(Mth.clamp((t - 0.52F) / 0.40F, 0.0F, 1.0F));
+                        tx = Mth.lerp(u, -0.78F, 0.44F) + biteVib;
+                        ty = 0.08F - Mth.sin(u * Mth.TWO_PI) * 0.20F;
+                        tz = -0.34F;
+                        rx = -82.0F;
+                        ry = Mth.lerp(u, 108.0F, -94.0F);
+                        rz = Mth.lerp(u, 68.0F, -48.0F);
+                    }
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
+                case ANIM_SUN_SETTING_SUN -> {
+                    // 日·斜阳转身：凌空倒转反手自上而下赤红奇袭横斩！
+                    float u = t < 0.16F ? 0.0F : whipCurve((t - 0.16F) / 0.66F);
+                    tx = Mth.lerp(u, -0.68F, 0.48F) + biteVib;
+                    ty = Mth.lerp(u, 0.42F, -0.34F);
+                    tz = -0.36F;
+                    rx = Mth.lerp(u, -52.0F, -106.0F);
+                    ry = Mth.lerp(u, 118.0F, -98.0F);
+                    rz = Mth.lerp(u, 155.0F, 15.0F);
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
+                case ANIM_SUN_HEAT_HAZE -> {
+                    // 日·飞轮阳炎：高频热浪微颤、斜向前方极远伸展阳炎刀锋！
+                    float u = t < 0.14F ? 0.0F : whipCurve((t - 0.14F) / 0.60F);
+                    float shimmer = Mth.sin((player.tickCount + partialTick) * 3.4F) * 0.032F;
+                    tx = Mth.lerp(u, 0.36F, -0.68F) + shimmer + biteVib;
+                    ty = -0.04F + shimmer * 0.8F;
+                    tz = -0.58F - Mth.sin(u * Mth.PI) * 0.24F;
+                    rx = -86.0F;
+                    ry = Mth.lerp(u, -82.0F, 92.0F);
+                    rz = Mth.lerp(u, -36.0F, 52.0F);
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
+                case ANIM_SUN_FLAME_DANCE -> {
+                    // 日·炎舞：第一刀宽幅斜挑重斩 / 第二刀回旋炽炎暴劈！
+                    boolean second = (a.paramInt & 1) != 0;
+                    float u = t < 0.08F ? 0.0F : whipCurve((t - 0.08F) / 0.76F);
+                    if (!second) {
+                        tx = Mth.lerp(u, 0.42F, -0.74F) + biteVib;
+                        ty = Mth.lerp(u, -0.38F, 0.36F);
+                        tz = -0.32F;
+                        rx = Mth.lerp(u, -24.0F, -112.0F);
+                        ry = Mth.lerp(u, -88.0F, 98.0F);
+                        rz = Mth.lerp(u, -44.0F, 62.0F);
+                    } else {
+                        tx = Mth.lerp(u, -0.74F, 0.44F) + biteVib;
+                        ty = Mth.lerp(u, 0.44F, -0.44F);
+                        tz = -0.42F;
+                        rx = Mth.lerp(u, -118.0F, -28.0F);
+                        ry = Mth.lerp(u, 108.0F, -92.0F);
+                        rz = Mth.lerp(u, 72.0F, -54.0F);
+                    }
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
+                case ANIM_SUN_HALO_DRAGON_DASH -> {
+                    // 日·日晕之龙·头舞：四段极速游龙狂舞大弧！
+                    float u = snapOut(Mth.clamp((t - 0.06F) / 0.86F, 0.0F, 1.0F));
+                    float side = (a.paramInt % 2 == 0) ? 1.0F : -1.0F;
+                    tx = Mth.lerp(u, 0.48F * side, -0.80F * side) + biteVib;
+                    ty = Mth.lerp(u, -0.30F * side, 0.32F * side);
+                    tz = -0.44F - Mth.sin(u * Mth.PI) * 0.20F;
+                    rx = -88.0F;
+                    ry = Mth.lerp(u, -104.0F * side, 114.0F * side);
+                    rz = Mth.lerp(u, -58.0F * side, 72.0F * side);
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
+                case ANIM_SUN_DANCING_FLASH -> {
+                    // 日·圆舞一闪：极速雷步瞬闪大弧一刀断首！
+                    float u = snapOut(Mth.clamp((t - 0.06F) / 0.50F, 0.0F, 1.0F));
+                    tx = Mth.lerp(u, 0.46F, -0.86F) + biteVib;
+                    ty = -0.10F;
+                    tz = -0.52F;
+                    rx = -86.0F;
+                    ry = Mth.lerp(u, -110.0F, 124.0F);
+                    rz = Mth.lerp(u, -52.0F, 82.0F);
+                    return new FirstPersonPose(tx, ty, tz, rx, ry, rz);
+                }
                 default -> {}
             }
         }
@@ -724,6 +830,47 @@ public final class SwordChoreography {
                 float fade = t > 0.62F ? 1.0F - smoothStep((t - 0.62F) / 0.38F) : 1.0F;
                 yield new ThirdPersonBodyPose(Mth.lerp(u, -20.0F, 36.0F) * fade, 0.0F, 0.0F, 0.0F);
             }
+            case ANIM_SUN_CLEAR_BLUE_SKY -> {
+                // 碧罗之天：由下而上逆向 360° 垂直升天翻转！
+                if (t < 0.10F) {
+                    yield new ThirdPersonBodyPose(20.0F * smoothStep(t / 0.10F), 0.0F, 0.0F, 0.0F);
+                }
+                yield new ThirdPersonBodyPose(-snapOut((t - 0.10F) / 0.90F) * 360.0F, 0.0F, 0.0F, 0.0F);
+            }
+            case ANIM_SUN_RAGING_SUN -> {
+                float s = Mth.sin(t * Mth.PI);
+                float yaw = t < 0.50F ? Mth.lerp(t / 0.50F, -48.0F, 52.0F) : Mth.lerp((t - 0.50F) / 0.50F, 52.0F, -48.0F);
+                yield new ThirdPersonBodyPose(0.0F, yaw * s, 20.0F * s, (t < 0.50F ? -14.0F : 14.0F) * s);
+            }
+            case ANIM_SUN_SETTING_SUN -> {
+                // 斜阳转身：半空优雅 180° 倒立逆转旋身横斩！
+                float s = Mth.sin(t * Mth.PI);
+                float flip = 180.0F * Mth.sin(Mth.clamp(t * 1.15F, 0.0F, 1.0F) * Mth.PI);
+                float spin = whipCurve(Mth.clamp((t - 0.14F) / 0.72F, 0.0F, 1.0F)) * 360.0F;
+                yield new ThirdPersonBodyPose(flip, spin, 14.0F * s, 16.0F * s);
+            }
+            case ANIM_SUN_HEAT_HAZE -> {
+                float u = whipCurve(Mth.clamp((t - 0.12F) / 0.62F, 0.0F, 1.0F));
+                float fade = t > 0.78F ? 1.0F - smoothStep((t - 0.78F) / 0.22F) : 1.0F;
+                yield new ThirdPersonBodyPose(0.0F, Mth.lerp(u, -40.0F, 48.0F) * fade, 28.0F * fade, 8.0F * fade);
+            }
+            case ANIM_SUN_FLAME_DANCE -> {
+                boolean second = (a.paramInt & 1) != 0;
+                float u = whipCurve(Mth.clamp((t - 0.08F) / 0.78F, 0.0F, 1.0F));
+                float s = Mth.sin(t * Mth.PI);
+                float yaw = second ? Mth.lerp(u, 52.0F, -64.0F) : Mth.lerp(u, -46.0F, 52.0F);
+                yield new ThirdPersonBodyPose(second ? 16.0F * s : 0.0F, yaw * s, 24.0F * s, (second ? 18.0F : -14.0F) * s);
+            }
+            case ANIM_SUN_HALO_DRAGON_DASH -> {
+                float u = snapOut(t);
+                float side = (a.paramInt % 2 == 0) ? 1.0F : -1.0F;
+                yield new ThirdPersonBodyPose(18.0F, Mth.lerp(u, -58.0F * side, 64.0F * side), 28.0F, 22.0F * side);
+            }
+            case ANIM_SUN_DANCING_FLASH -> {
+                float u = snapOut(Mth.clamp((t - 0.06F) / 0.56F, 0.0F, 1.0F));
+                float fade = t > 0.72F ? 1.0F - smoothStep((t - 0.72F) / 0.28F) : 1.0F;
+                yield new ThirdPersonBodyPose(0.0F, Mth.lerp(u, -58.0F, 68.0F) * fade, 34.0F * fade, 14.0F * fade);
+            }
             default -> ThirdPersonBodyPose.IDENTITY;
         };
     }
@@ -778,7 +925,7 @@ public final class SwordChoreography {
     }
 
     public static boolean isHoldingWaterBlade(Player player) {
-        return WaterNichirinBladeItem.isWaterBlade(player.getMainHandItem());
+        return WaterNichirinBladeItem.isAnyNichirinBlade(player.getMainHandItem());
     }
 
     private static Vec3 rotateHorizontal(Vec3 fwd, Vec3 right, float deg) {

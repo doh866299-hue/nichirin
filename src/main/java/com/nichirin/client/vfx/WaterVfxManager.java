@@ -64,6 +64,7 @@ public final class WaterVfxManager {
     static final List<VelocityStreakVfx> STREAKS = new ArrayList<>();
     static final List<ThreadSnapVfx> THREAD_SNAPS = new ArrayList<>();
     static final List<RippleRingVfx> RIPPLE_RINGS = new ArrayList<>();
+    static final List<SunAfterimageVfx> AFTERIMAGES = new ArrayList<>();
     private static final List<DelayedCue> DELAYED_CUES = new ArrayList<>();
 
     // ==================== 鬼灭战斗直觉状态（隙之线 + 杀气感知 + 看破/断线视觉瞬闪） ====================
@@ -283,7 +284,7 @@ public final class WaterVfxManager {
                 spawnBurstStreaks(p.x(), groundY + 1.0, p.z(), radius * 0.78, 58, 0.76, sun, rand);
                 triggerShakeAt(mc, p.x(), groundY, p.z(), 0.85F, 30.0);
                 triggerFovKickAt(mc, p.x(), groundY, p.z(), 8.8F, 24.0);
-                triggerFlashAt(mc, p.x(), groundY, p.z(), 0.16F, 0xE6F8FF, 26.0);
+                triggerFlashAt(mc, p.x(), groundY, p.z(), 0.16F, sun ? 0xFFE0A0 : 0xE6F8FF, 26.0);
             }
             case WaterVfxPayload.KIND_CHARGE_AURA -> {
                 float radius = Math.max(3.0F, p.param1());
@@ -311,7 +312,7 @@ public final class WaterVfxManager {
                 spawnBurstStreaks(bx, by + 0.2, bz, 1.8, 30 + tier * 8, 0.60, sun, rand);
                 triggerShakeAt(mc, p.x(), p.y(), p.z(), 0.38F + tier * 0.08F, 30.0);
                 triggerFovKickAt(mc, p.x(), p.y(), p.z(), 5.0F + tier * 1.0F, 22.0);
-                triggerFlashAt(mc, p.x(), p.y(), p.z(), 0.10F + tier * 0.02F, 0xE6F8FF, 24.0);
+                triggerFlashAt(mc, p.x(), p.y(), p.z(), 0.10F + tier * 0.02F, sun ? 0xFFE2A6 : 0xE6F8FF, 24.0);
             }
             case WaterVfxPayload.KIND_DEAD_CALM_DOMAIN -> {
                 int dur = Math.max(30, p.duration());
@@ -410,7 +411,7 @@ public final class WaterVfxManager {
                 spawnBurstStreaks(p.x(), groundY + 1.0, p.z(), radius * 0.78, 36 + stage * 14, 0.66 + stage * 0.06, sun, rand);
                 triggerShakeAt(mc, p.x(), groundY, p.z(), 0.48F + stage * 0.12F, 30.0);
                 triggerFovKickAt(mc, p.x(), groundY, p.z(), 6.0F + stage * 1.4F, 26.0);
-                triggerFlashAt(mc, p.x(), groundY, p.z(), 0.11F + stage * 0.025F, 0xE6FAFF, 28.0);
+                triggerFlashAt(mc, p.x(), groundY, p.z(), 0.11F + stage * 0.025F, sun ? 0xFFE2A4 : 0xE6FAFF, 28.0);
             }
             case WaterVfxPayload.KIND_DRAGON_WAKE_IMPACT -> {
                 // 方案 B 巨龙顺轨尾流二段碾压：干净利落的浮世绘浪花/烈焰与犀利斩痕（大幅收敛脏泥块！）
@@ -630,6 +631,138 @@ public final class WaterVfxManager {
                     triggerShakeAt(mc, p.x(), p.y(), p.z(), 0.26F + stage * 0.08F, 24.0);
                 }
             }
+            case WaterVfxPayload.KIND_SUN_AFTERIMAGE -> {
+                // 日·幻日虹：原地留下炽热虹光残像剪影 + 虹彩火星扭曲热浪！
+                int dur = Math.max(16, p.duration());
+                float evadeYaw = p.param1();
+                float scale = Math.max(0.85F, p.param2());
+                AFTERIMAGES.add(new SunAfterimageVfx(p.x(), p.y(), p.z(), p.yaw(), evadeYaw, scale, dur));
+                spawnBurstStreaks(p.x(), p.y() + 1.0, p.z(), 1.25, 28, 0.46, true, rand);
+                spawnRingBurstUkiyoFoam(p.x(), p.y() + 0.9, p.z(), 0.45, 1.85, 16, 0.28, 1.15F, true, rand);
+                triggerFovKickAt(mc, p.x(), p.y(), p.z(), 7.2F, 18.0);
+                triggerFlashAt(mc, p.x(), p.y(), p.z(), 0.14F, 0xFFE4B4, 18.0);
+            }
+            case WaterVfxPayload.KIND_SUN_FORM_VFX -> {
+                // 日之呼吸 · 火之神神乐 专属 7 套剑舞演出（17..23）！
+                int animType = Math.round(p.param1());
+                float radius = Math.max(3.2F, p.param2());
+                int subStep = Math.round(p.param3());
+                int dur = Math.max(6, p.duration());
+                // 日晕之龙连续游龙穿斩不重置前一段刀光带，让 4 段火龙斩弧在空中连成狂舞炎阵！
+                if (animType != SwordChoreography.ANIM_SUN_HALO_DRAGON_DASH || subStep == 0) {
+                    resetBladeTrail(eid);
+                }
+                SwordChoreography.startAnim(eid, animType, dur, subStep, tc, true);
+
+                double sx = p.x(), sy = p.y(), sz = p.z();
+                float syaw = p.yaw();
+
+                switch (animType) {
+                    case SwordChoreography.ANIM_SUN_CLEAR_BLUE_SKY -> {
+                        // 碧罗之天：升天大炎轮火星喷涌 + 上挑热浪
+                        spawnBurstStreaks(sx, sy + 0.6, sz, radius * 0.72, 34, 0.62, true, rand);
+                        DELAYED_CUES.add(new DelayedCue(3, () -> {
+                            spawnRingBurstUkiyoFoam(sx, sy + 0.9, sz, 1.2, radius * 0.92, 24, 0.36, 1.38F, true, rand);
+                            triggerShakeAt(mc, sx, sy, sz, 0.48F, 20.0);
+                            triggerFlashAt(mc, sx, sy, sz, 0.13F, 0xFFE0A0, 20.0);
+                        }));
+                        triggerFovKickAt(mc, sx, sy, sz, 6.4F, 18.0);
+                    }
+                    case SwordChoreography.ANIM_SUN_RAGING_SUN -> {
+                        // 烈日红镜：左右「∞」字双弧两拍爆发！
+                        spawnSlashStreaks(sx, sy, sz, syaw, radius * 0.95F, 240.0F, 24, true, rand);
+                        DELAYED_CUES.add(new DelayedCue(3, () ->
+                                spawnSlashUkiyoFoam(sx, sy, sz, syaw, radius, 18.0F, 240.0F, 20, tc, true, rand)));
+                        DELAYED_CUES.add(new DelayedCue(8, () -> {
+                            Entity ent = level.getEntity(eid);
+                            double ex = ent != null ? ent.getX() : sx;
+                            double ey = ent != null ? ent.getY() + 1.05 : sy;
+                            double ez = ent != null ? ent.getZ() : sz;
+                            float eyaw = ent != null ? ent.getYRot() : syaw;
+                            spawnSlashStreaks(ex, ey, ez, eyaw, radius, 250.0F, 26, true, rand);
+                            spawnSlashUkiyoFoam(ex, ey, ez, eyaw, radius * 1.05F, -18.0F, 250.0F, 22, tc, true, rand);
+                            triggerShakeAt(mc, ex, ey, ez, 0.42F, 20.0);
+                        }));
+                        triggerFovKickAt(mc, sx, sy, sz, 5.2F, 18.0);
+                    }
+                    case SwordChoreography.ANIM_SUN_SETTING_SUN -> {
+                        // 斜阳转身：半空倒立聚势 -> 第 4 tick 赤红横斩爆发
+                        triggerFovKickAt(mc, sx, sy, sz, -4.2F, 18.0);
+                        DELAYED_CUES.add(new DelayedCue(4, () -> {
+                            Entity ent = level.getEntity(eid);
+                            double ex = ent != null ? ent.getX() : sx;
+                            double ey = ent != null ? ent.getY() + 1.1 : sy;
+                            double ez = ent != null ? ent.getZ() : sz;
+                            float eyaw = ent != null ? ent.getYRot() : syaw;
+                            spawnSlashStreaks(ex, ey, ez, eyaw, radius * 1.05F, 270.0F, 34, true, rand);
+                            spawnSlashUkiyoFoam(ex, ey, ez, eyaw, radius * 1.06F, -12.0F, 270.0F, 28, tc, true, rand);
+                            triggerFovKickAt(mc, ex, ey, ez, 7.2F, 20.0);
+                            triggerShakeAt(mc, ex, ey, ez, 0.56F, 22.0);
+                            triggerFlashAt(mc, ex, ey, ez, 0.15F, 0xFFDC98, 20.0);
+                        }));
+                    }
+                    case SwordChoreography.ANIM_SUN_HEAT_HAZE -> {
+                        // 飞轮阳炎：7.4 格超远阳炎热浪余光 + 扭曲炽白火星雨
+                        spawnSlashStreaks(sx, sy, sz, syaw, radius, 230.0F, 38, true, rand);
+                        DELAYED_CUES.add(new DelayedCue(3, () -> {
+                            spawnSlashUkiyoFoam(sx, sy, sz, syaw, radius * 0.96F, 4.0F, 230.0F, 30, tc, true, rand);
+                            for (int i = 0; i < 3; i++) {
+                                float yawOff = syaw + (i - 1) * 38.0F;
+                                Vec3 dir = Vec3.directionFromRotation(0.0F, yawOff).normalize();
+                                RIFT_SLASHES.add(new WaterRiftSlashVfx(
+                                        sx + dir.x * (radius * 0.72), sy + 0.15, sz + dir.z * (radius * 0.72),
+                                        yawOff, (rand.nextFloat() - 0.5F) * 28.0F, 2.8F, 10, true, true
+                                ));
+                            }
+                            triggerShakeAt(mc, sx, sy, sz, 0.44F, 22.0);
+                            triggerFlashAt(mc, sx, sy, sz, 0.14F, 0xFFF0C2, 22.0);
+                        }));
+                        triggerFovKickAt(mc, sx, sy, sz, 5.8F, 20.0);
+                    }
+                    case SwordChoreography.ANIM_SUN_FLAME_DANCE -> {
+                        // 炎舞二连击：第 2 刀大幅加强震屏与炽焰炸裂！
+                        boolean second = (subStep & 1) != 0;
+                        spawnSlashStreaks(sx, sy, sz, syaw, radius, 250.0F, second ? 38 : 22, true, rand);
+                        DELAYED_CUES.add(new DelayedCue(2, () -> {
+                            spawnSlashUkiyoFoam(sx, sy, sz, syaw, radius * (second ? 1.10F : 0.95F),
+                                    second ? -26.0F : 24.0F, 255.0F, second ? 34 : 20, tc, true, rand);
+                            if (second) {
+                                triggerShakeAt(mc, sx, sy, sz, 0.62F, 24.0);
+                                triggerFovKickAt(mc, sx, sy, sz, 7.6F, 22.0);
+                                triggerFlashAt(mc, sx, sy, sz, 0.17F, 0xFFDF9E, 22.0);
+                            } else {
+                                triggerShakeAt(mc, sx, sy, sz, 0.34F, 18.0);
+                                triggerFovKickAt(mc, sx, sy, sz, 4.4F, 18.0);
+                            }
+                        }));
+                    }
+                    case SwordChoreography.ANIM_SUN_HALO_DRAGON_DASH -> {
+                        // 日晕之龙·头舞：每段游龙高速折返持续延长 3D 太阳神龙随身狂舞轨迹！
+                        extendActiveDragonTracking(eid, 12);
+                        spawnSlashStreaks(sx, sy, sz, syaw, radius * 0.95F, 265.0F, 28, true, rand);
+                        spawnRingBurstUkiyoFoam(sx, sy, sz, 1.0, radius * 0.85, 18, 0.42, 1.32F, true, rand);
+                        triggerFovKickAt(mc, sx, sy, sz, 5.6F + subStep * 0.9F, 22.0);
+                        triggerShakeAt(mc, sx, sy, sz, 0.36F + subStep * 0.06F, 24.0);
+                    }
+                    case SwordChoreography.ANIM_SUN_DANCING_FLASH -> {
+                        // 圆舞一闪：雷步金白电光 + 太阳烈焰双色瞬闪爆发！
+                        for (int i = 0; i < 24 && STREAKS.size() < MAX_STREAKS; i++) {
+                            double ang = rand.nextDouble() * Math.PI * 2.0;
+                            double sp = 0.48 + rand.nextDouble() * 0.62;
+                            STREAKS.add(new VelocityStreakVfx(
+                                    sx, sy + (rand.nextDouble() - 0.3) * 0.8, sz,
+                                    Math.cos(ang) * sp, 0.08 + rand.nextDouble() * 0.28, Math.sin(ang) * sp,
+                                    1.65F, 0.028F, 11 + rand.nextInt(6), true, true
+                            ));
+                        }
+                        spawnSlashUkiyoFoam(sx, sy, sz, syaw, radius, 4.0F, 275.0F, 30, tc, true, rand);
+                        triggerFovKickAt(mc, sx, sy, sz, 9.2F, 22.0);
+                        triggerShakeAt(mc, sx, sy, sz, 0.54F, 22.0);
+                        triggerFlashAt(mc, sx, sy, sz, 0.19F, 0xFFF4C8, 22.0);
+                    }
+                    default -> {}
+                }
+            }
             default -> {}
         }
     }
@@ -795,6 +928,7 @@ public final class WaterVfxManager {
         tickList(STREAKS);
         tickList(THREAD_SNAPS);
         tickList(RIPPLE_RINGS);
+        tickList(AFTERIMAGES);
 
         // 2.5 实时鬼灭战斗直觉扫描（隙之线最佳破绽目标锁定 + 杀气危机感知）
         updateCombatIntuition(level, mc.player);
@@ -1308,6 +1442,7 @@ public final class WaterVfxManager {
         STREAKS.clear();
         THREAD_SNAPS.clear();
         RIPPLE_RINGS.clear();
+        AFTERIMAGES.clear();
         DELAYED_CUES.clear();
         EXPOSED_TARGETS.clear();
         THREAD_COOLDOWNS.clear();
@@ -2429,6 +2564,23 @@ public final class WaterVfxManager {
             this.yawDeg = yawDeg; this.pitchDeg = pitchDeg;
             this.maxRadius = maxRadius; this.mode = mode;
             this.maxAge = Math.max(8, maxAge); this.sunStyle = sunStyle;
+        }
+
+        @Override
+        public boolean tick() { return ++age < maxAge; }
+    }
+
+    /** 日·幻日虹 原地 3D 炽热虹光残像剪影特效 */
+    public static final class SunAfterimageVfx implements TickableVfx {
+        public final double x, y, z;
+        public final float facingYaw, evadeYaw, scale;
+        public final int maxAge;
+        public int age = 0;
+
+        public SunAfterimageVfx(double x, double y, double z, float facingYaw, float evadeYaw, float scale, int maxAge) {
+            this.x = x; this.y = y; this.z = z;
+            this.facingYaw = facingYaw; this.evadeYaw = evadeYaw;
+            this.scale = scale; this.maxAge = Math.max(12, maxAge);
         }
 
         @Override

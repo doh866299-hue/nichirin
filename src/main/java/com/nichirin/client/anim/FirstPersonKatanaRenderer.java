@@ -31,7 +31,7 @@ public final class FirstPersonKatanaRenderer {
         if (event.getHand() != InteractionHand.MAIN_HAND) {
             return;
         }
-        if (!WaterNichirinBladeItem.isWaterBlade(event.getItemStack())) {
+        if (!WaterNichirinBladeItem.isAnyNichirinBlade(event.getItemStack())) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();

@@ -91,7 +91,7 @@ public final class NichirinClient {
             public HumanoidModel.ArmPose getArmPose(LivingEntity entity, InteractionHand hand, ItemStack stack) {
                 return hand == InteractionHand.MAIN_HAND ? KatanaArmPose.getArmPose() : null;
             }
-        }, ModItems.WATER_NICHIRIN_BLADE.get());
+        }, ModItems.WATER_NICHIRIN_BLADE.get(), ModItems.SUN_NICHIRIN_BLADE.get());
     }
 
     private void registerKeyMappings(RegisterKeyMappingsEvent event) {

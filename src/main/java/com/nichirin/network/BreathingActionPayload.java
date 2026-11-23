@@ -22,9 +22,15 @@ public record BreathingActionPayload(byte action, int arg1, int arg2) implements
     public static final byte ACTION_BASIC_SWING = 7;
     /** 拾之型·生生流转 松开右键信号：立即借当前已叠加的回旋势能斩出收尾一击！ */
     public static final byte ACTION_FLUX_RELEASE = 8;
+    /** 日·第十三型圆环 按住右键持续衔接心跳 / 松开信号（arg1=1按住持续连舞 / 0松开，arg2=上下文） */
+    public static final byte ACTION_SUN_CYCLE_HOLD = 9;
 
-    /** arg2 上下文打包辅助：bit0=空中, bit1=潜行, bits2..3=前向(0无/1前/2后), bits4..5=横向(0无/1左/2右) */
+    /** arg2 上下文打包辅助：bit0=空中, bit1=潜行, bits2..3=前向(0无/1前/2后), bits4..5=横向(0无/1左/2右), bit6=疾跑 */
     public static int packContext(boolean airborne, boolean sneak, int fwdSign, int strafeSign) {
+        return packContext(airborne, sneak, fwdSign, strafeSign, false);
+    }
+
+    public static int packContext(boolean airborne, boolean sneak, int fwdSign, int strafeSign, boolean sprinting) {
         int bits = 0;
         if (airborne) bits |= 1;
         if (sneak) bits |= 2;
@@ -32,11 +38,13 @@ public record BreathingActionPayload(byte action, int arg1, int arg2) implements
         int sCode = strafeSign > 0 ? 1 : (strafeSign < 0 ? 2 : 0);
         bits |= (fCode << 2);
         bits |= (sCode << 4);
+        if (sprinting) bits |= 64;
         return bits;
     }
 
     public static boolean unpackAirborne(int ctx) { return (ctx & 1) != 0; }
     public static boolean unpackSneak(int ctx) { return (ctx & 2) != 0; }
+    public static boolean unpackSprinting(int ctx) { return (ctx & 64) != 0; }
     public static int unpackFwdSign(int ctx) {
         int c = (ctx >> 2) & 3;
         return c == 1 ? 1 : (c == 2 ? -1 : 0);

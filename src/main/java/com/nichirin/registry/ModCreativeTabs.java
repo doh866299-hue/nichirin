@@ -21,6 +21,7 @@ public final class ModCreativeTabs {
                     .icon(() -> new ItemStack(ModItems.WATER_NICHIRIN_BLADE.get()))
                     .displayItems((params, output) -> {
                         output.accept(ModItems.WATER_NICHIRIN_BLADE.get());
+                        output.accept(ModItems.SUN_NICHIRIN_BLADE.get());
                         output.accept(ModItems.SCARLET_CRIMSON_INGOT.get());
                         output.accept(ModItems.SCARLET_CRIMSON_IRON_SAND.get());
                     })

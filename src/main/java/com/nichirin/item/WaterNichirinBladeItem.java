@@ -30,6 +30,16 @@ public class WaterNichirinBladeItem extends Item {
         return !stack.isEmpty() && stack.getItem() instanceof WaterNichirinBladeItem;
     }
 
+    /** 任意日轮刀（水之日轮刀 或 日之日轮刀）统一判定 */
+    public static boolean isAnyNichirinBlade(ItemStack stack) {
+        return isWaterBlade(stack) || SunNichirinBladeItem.isSunBlade(stack);
+    }
+
+    /** 根据手持日轮刀直接解析所属呼吸流派 */
+    public static BreathingStyle resolveBladeStyle(ItemStack stack) {
+        return SunNichirinBladeItem.isSunBlade(stack) ? BreathingStyle.SUN : BreathingStyle.WATER;
+    }
+
     /**
      * 更新刀身 3D 外观对应的 CustomModelData 阈值：
      * 0.0 = 水之日轮刀（深海蓝） | 1.0 = 日之呼吸漆黑日轮刀 | 2.0 = 全集中/奥义炽红赫刀

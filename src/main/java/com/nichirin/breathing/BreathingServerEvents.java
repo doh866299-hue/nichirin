@@ -7,6 +7,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -36,6 +37,11 @@ public final class BreathingServerEvents {
     @SubscribeEvent
     public void onLivingDrops(LivingDropsEvent event) {
         BladeWorldPhysics.handleSunBladeCookDrops(event);
+    }
+
+    @SubscribeEvent
+    public void onLivingHeal(LivingHealEvent event) {
+        SunBreathingForms.handleScorchedHeal(event);
     }
 
     @SubscribeEvent
@@ -108,6 +114,10 @@ public final class BreathingServerEvents {
             state.dragonRushTicks = 0;
             state.instinctCounterWindowTicks = 0;
             state.serverHitstopTicks = 0.0F;
+            state.sunAfterimagePos = null;
+            state.sunAfterimageTicks = 0;
+            state.sunBurstBusyTicks = 0;
+            SunBreathingForms.resetSunCycle(state);
             state.exposedTargets.clear();
             state.threadCooldowns.clear();
             state.frozenTargets.clear();
@@ -126,6 +136,7 @@ public final class BreathingServerEvents {
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         BreathingManager.clearAll();
+        SunBreathingForms.clearAll();
         BladeWorldPhysics.clearAll();
     }
 }

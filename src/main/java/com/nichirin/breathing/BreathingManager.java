@@ -1,6 +1,7 @@
 package com.nichirin.breathing;
 
 import com.nichirin.NichirinMod;
+import com.nichirin.item.SunNichirinBladeItem;
 import com.nichirin.item.WaterNichirinBladeItem;
 import com.nichirin.network.BreathSyncPayload;
 import com.nichirin.network.BreathingActionPayload;
@@ -85,42 +86,64 @@ public final class BreathingManager {
 
     public static void clearAll() { STATES.clear(); }
 
+    /** 判定玩家主手是否持有任意一把日轮刀（水之日轮刀或日之日轮刀） */
     public static boolean isHoldingWaterBlade(Player player) {
-        return WaterNichirinBladeItem.isWaterBlade(player.getMainHandItem());
+        return WaterNichirinBladeItem.isAnyNichirinBlade(player.getMainHandItem());
+    }
+
+    public static boolean isHoldingSunBlade(Player player) {
+        return SunNichirinBladeItem.isSunBlade(player.getMainHandItem());
+    }
+
+    public static BreathingStyle resolveHeldStyle(Player player) {
+        return WaterNichirinBladeItem.resolveBladeStyle(player.getMainHandItem());
     }
 
     /**
-     * 处理客户端呼吸法指令包（含 X 键实时切换水/日呼吸流派）
+     * 处理客户端呼吸法指令包（自动依据主手所持水之/日之日轮刀路由至对应流派引擎）
      */
     public static void handleActionPayload(BreathingActionPayload payload, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer player)) return;
         PlayerBreathState state = getState(player.getUUID());
         ServerLevel level = player.level();
+        if (isHoldingWaterBlade(player)) {
+            state.style = resolveHeldStyle(player);
+        }
         boolean isSun = state.style == BreathingStyle.SUN;
 
         switch (payload.action()) {
             case BreathingActionPayload.ACTION_SWITCH_STYLE -> {
                 if (!isHoldingWaterBlade(player)) return;
-                // 当前专注将「水之呼吸 · 全十一型」100% 还原为标杆；日之呼吸保留底层资产待独立重构十三型！
-                state.style = BreathingStyle.WATER;
                 updateHeldBladeVisual(player, state);
-                player.sendOverlayMessage(Component.translatable("message.nichirin.sun_wip_focus_water")
-                        .withStyle(ChatFormatting.AQUA));
+                player.sendOverlayMessage(Component.translatable("message.nichirin.style_by_blade")
+                        .withStyle(isSun ? ChatFormatting.GOLD : ChatFormatting.AQUA));
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 0.72F, 1.35F);
                 syncPlayer(player, state);
             }
             case BreathingActionPayload.ACTION_CAST_FORM -> {
                 if (!isHoldingWaterBlade(player)) return;
-                state.style = BreathingStyle.WATER;
-                WaterForm baseForm = WaterForm.fromOrdinal(payload.arg1());
                 int ctx = payload.arg2();
                 state.chargingMode = 0;
                 state.chargeTicks = 0;
-                tryCastForm(player, level, state, baseForm, ctx);
+                if (isSun) {
+                    SunForm sunForm = SunForm.fromOrdinal(payload.arg1());
+                    if (sunForm == SunForm.THIRTEENTH_SUN_CYCLE) {
+                        state.sunCycleHolding = true;
+                        state.sunCycleHoldCtx = ctx;
+                    }
+                    SunBreathingForms.tryCastSunForm(player, level, state, sunForm, ctx, false);
+                } else {
+                    WaterForm baseForm = WaterForm.fromOrdinal(payload.arg1());
+                    tryCastForm(player, level, state, baseForm, ctx);
+                }
             }
             case BreathingActionPayload.ACTION_FLUX_RELEASE -> {
                 state.fluxHolding = false;
+            }
+            case BreathingActionPayload.ACTION_SUN_CYCLE_HOLD -> {
+                state.sunCycleHolding = (payload.arg1() != 0) && isHoldingSunBlade(player);
+                state.sunCycleHoldCtx = payload.arg2();
             }
             case BreathingActionPayload.ACTION_START_CHARGE -> {
                 if (!isHoldingWaterBlade(player)) return;
@@ -218,6 +241,17 @@ public final class BreathingManager {
         PlayerBreathState state = getState(player.getUUID());
         ServerLevel level = player.level();
         boolean holdingBlade = isHoldingWaterBlade(player);
+        if (holdingBlade) {
+            BreathingStyle heldStyle = resolveHeldStyle(player);
+            if (state.style != heldStyle) {
+                state.style = heldStyle;
+                state.fluxHolding = false;
+                if (heldStyle != BreathingStyle.SUN) {
+                    SunBreathingForms.resetSunCycle(state);
+                }
+                state.dirty = true;
+            }
+        }
         boolean isSun = state.style == BreathingStyle.SUN;
 
         if (state.globalRecoveryTicks > 0) state.globalRecoveryTicks--;
@@ -231,6 +265,7 @@ public final class BreathingManager {
         for (int i = 0; i < state.formCooldowns.length; i++) {
             if (state.formCooldowns[i] > 0) state.formCooldowns[i]--;
         }
+        SunBreathingForms.tickSunPlayer(player, level, state, holdingBlade && isSun);
         if (player.tickCount % 40 == 0 && (!state.exposedTargets.isEmpty() || !state.threadCooldowns.isEmpty())) {
             long now = level.getGameTime();
             state.exposedTargets.entrySet().removeIf(e -> e.getValue() <= now);
@@ -355,7 +390,7 @@ public final class BreathingManager {
 
         state.syncTimer++;
         boolean changed = Math.abs(prevBreath - state.breath) > 0.35F
-                || state.deadCalmTicks > 0 || state.fakeRainbowTicks > 0 || state.dirty;
+                || state.deadCalmTicks > 0 || state.fakeRainbowTicks > 0 || state.sunCycleWindowTicks > 0 || state.dirty;
         if (state.dirty || (changed && state.syncTimer >= 2) || state.syncTimer >= 20) {
             syncPlayer(player, state);
         }
@@ -2146,7 +2181,7 @@ public final class BreathingManager {
     }
 
     /** 140Hz 共享刀锋连续子步扫描统一入口：按真实刀锋扫到敌人的先后顺序逐个命中，并赋予精确 3D 刀锋切线冲量！ */
-    private static void runSweptBladeHits(
+    static void runSweptBladeHits(
             ServerPlayer player, ServerLevel level, PlayerBreathState state,
             int animType, float prevT, float curT, int paramInt, boolean tc, boolean sun,
             Vec3 prevOrigin, Vec3 curOrigin, float prevYaw, float curYaw,
@@ -2190,7 +2225,7 @@ public final class BreathingManager {
         }
     }
 
-    private static void decrementHitCooldowns(Map<Integer, Integer> hitCd) {
+    static void decrementHitCooldowns(Map<Integer, Integer> hitCd) {
         if (hitCd.isEmpty()) return;
         hitCd.entrySet().removeIf(e -> {
             int nv = e.getValue() - 1;
@@ -2268,6 +2303,15 @@ public final class BreathingManager {
         float momentumMult = BladeWorldPhysics.computeMomentumMultiplier(player);
         float steamBonus = BladeWorldPhysics.triggerWaterFireChemistry(player, level, target, sun);
         float finalDmg = baseDamage * momentumMult + steamBonus;
+        boolean redBlade = sun && SunBreathingForms.isRedBladeActive(state);
+        if (sun) {
+            if (target.isInvertedHealAndHarm()) {
+                finalDmg *= 1.20F; // 日之呼吸克制亡灵/夜行生物
+            }
+            if (redBlade) {
+                finalDmg *= 1.16F; // 炽红赫刀额外破甲增伤
+            }
+        }
         if (threadBreak) {
             finalDmg *= (state.totalConcentration ? 1.60F : 1.45F);
             if (target.getHealth() - finalDmg <= 3.5F && target.getHealth() - finalDmg > 0.0F) {
@@ -2276,7 +2320,12 @@ public final class BreathingManager {
         }
 
         if (resetIframes) target.setInvulnerableTime(0);
-        if (sun) target.igniteForSeconds(heavy ? 6.5F : 4.5F);
+        if (sun) {
+            target.igniteForSeconds(redBlade ? 8.0F : (heavy ? 6.5F : 4.5F));
+            if (redBlade || heavy) {
+                SunBreathingForms.applyScorch(target, level, redBlade ? 120L : 80L);
+            }
+        }
 
         boolean hurt;
         state.inFormStrike = true;
@@ -2348,10 +2397,11 @@ public final class BreathingManager {
         float steamBonus = BladeWorldPhysics.triggerWaterFireChemistry(attacker, level, victim, isSun);
         float dmg = event.getAmount() * momentumMult + steamBonus;
 
-        if (state.totalConcentration) {
+        if (state.totalConcentration || (isSun && SunBreathingForms.isRedBladeActive(state))) {
             dmg *= (isSun ? 1.30F : 1.20F);
             if (isSun) {
-                victim.igniteForSeconds(4.0F);
+                victim.igniteForSeconds(5.0F);
+                SunBreathingForms.applyScorch(victim, level, 80L);
             }
             state.breath = Math.min(MAX_BREATH, state.breath + 4.5F);
             level.sendParticles(isSun ? ParticleTypes.FLAME : ParticleTypes.SPLASH,
@@ -2359,6 +2409,9 @@ public final class BreathingManager {
                     10, 0.35, 0.35, 0.35, 0.12);
         } else {
             state.breath = Math.min(MAX_BREATH, state.breath + 2.5F);
+        }
+        if (isSun && victim.isInvertedHealAndHarm()) {
+            dmg *= 1.18F;
         }
         BladeWorldPhysics.playMaterialHitResonance(level, victim, isSun);
 
@@ -2437,7 +2490,7 @@ public final class BreathingManager {
         }
     }
 
-    private static Vec3 horizontalLook(Player player) {
+    static Vec3 horizontalLook(Player player) {
         Vec3 look = player.getLookAngle();
         Vec3 h = new Vec3(look.x, 0.0, look.z);
         return h.lengthSqr() > 1.0E-4 ? h.normalize() : Vec3.directionFromRotation(0.0F, player.getYRot());
@@ -2450,10 +2503,11 @@ public final class BreathingManager {
 
     public static void updateHeldBladeVisual(ServerPlayer player, PlayerBreathState state) {
         ItemStack stack = player.getMainHandItem();
-        if (!WaterNichirinBladeItem.isWaterBlade(stack)) return;
-        boolean redBlade = state.style == BreathingStyle.SUN
-                && (state.totalConcentration || state.chargingMode == 1 || state.dragonRushTicks > 0);
-        WaterNichirinBladeItem.syncBladeModelVariant(stack, state.style, redBlade);
+        if (SunNichirinBladeItem.isSunBlade(stack)) {
+            SunNichirinBladeItem.syncRedBladeVisual(stack, SunBreathingForms.isRedBladeActive(state));
+        } else if (WaterNichirinBladeItem.isWaterBlade(stack)) {
+            WaterNichirinBladeItem.syncBladeModelVariant(stack, BreathingStyle.WATER, false);
+        }
     }
 
     public static void setTotalConcentration(ServerPlayer player, PlayerBreathState state, boolean active) {
@@ -2491,7 +2545,9 @@ public final class BreathingManager {
                 specialTicks,
                 state.globalRecoveryTicks,
                 state.lastCastFormOrdinal,
-                state.castCounter
+                state.castCounter,
+                state.sunCycleStep,
+                state.sunCycleWindowTicks
         ));
     }
 
@@ -2529,6 +2585,18 @@ public final class BreathingManager {
         public int syncTimer = 0;
         public boolean dirty = true;
         public final int[] formCooldowns = new int[WaterForm.values().length];
+        public final int[] sunFormCooldowns = new int[SunForm.values().length];
+        /** 日·第十三型圆环连舞状态 */
+        public int sunCycleStep = 0;
+        public int sunCycleNextIndex = 0;
+        public int sunCycleWindowTicks = 0;
+        public int sunCycleComboCount = 0;
+        public boolean sunCycleHolding = false;
+        public int sunCycleHoldCtx = 0;
+        public int sunBurstBusyTicks = 0;
+        /** 日·幻日虹原地残像诱敌锚点与剩余时长 */
+        public Vec3 sunAfterimagePos = null;
+        public int sunAfterimageTicks = 0;
         public final List<ActiveFormTask> activeTasks = new ArrayList<>();
     }
 

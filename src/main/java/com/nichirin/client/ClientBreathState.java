@@ -1,14 +1,18 @@
 package com.nichirin.client;
 
 import com.nichirin.breathing.BreathingStyle;
+import com.nichirin.breathing.SunForm;
 import com.nichirin.breathing.WaterForm;
+import com.nichirin.item.SunNichirinBladeItem;
+import com.nichirin.item.WaterNichirinBladeItem;
 import com.nichirin.network.BreathSyncPayload;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 客户端同步的本地呼吸法状态缓存：
- * 包含当前流派、呼吸气力值、全集中/凪领域状态、当前选中的水之呼吸剑型（方案 A 切型出招）、
- * 以及拾之型·生生流转实时回旋叠势圈数（1..4 圈）！
+ * 客户端同步的本地呼吸法状态缓存（双独立日轮刀流派：水之呼吸全十一型 & 日之呼吸全十三型）：
+ * 分别独立记忆水呼 / 日呼选中的剑型索引、冷却预测、生生流转叠势圈数与第十三型圆环连舞进度！
  */
 public final class ClientBreathState {
     private static BreathingStyle currentStyle = BreathingStyle.WATER;
@@ -20,17 +24,24 @@ public final class ClientBreathState {
     private static int specialDomainTicks = 0;
     private static int globalRecoveryTicks = 0;
 
-    /** 方案 A：当前选中的水之呼吸剑型索引（0..10 对应 壹之型 ~ 拾壹之型） */
-    private static int selectedFormIndex = 0;
+    /** 方案 A：分别记忆水之呼吸（0..10）与日之呼吸（0..12）当前选中的剑型索引，切刀不丢记忆！ */
+    private static int selectedWaterFormIndex = 0;
+    private static int selectedSunFormIndex = 0;
     private static int formSwitchFlashTicks = 0;
-    private static final int[] predictedCooldowns = new int[WaterForm.values().length];
+    private static final int[] predictedWaterCooldowns = new int[WaterForm.values().length];
+    private static final int[] predictedSunCooldowns = new int[SunForm.values().length];
 
-    /** 拾之型·生生流转 实时回旋叠势圈数（1..4） */
+    /** 水·拾之型·生生流转 实时回旋叠势圈数（1..4） */
     private static int fluxSpinStage = 0;
     private static int fluxSpinTicks = 0;
 
+    /** 日·第十三型·日之圆环 实时连舞进度（1..12）与剩余衔接窗口 tick */
+    private static int sunCycleStep = 0;
+    private static int sunCycleTicks = 0;
+
     private static int lastCastCounter = 0;
-    private static WaterForm bannerForm = null;
+    private static WaterForm bannerWaterForm = null;
+    private static SunForm bannerSunForm = null;
     private static BreathingStyle bannerStyle = BreathingStyle.WATER;
     private static int bannerTicks = 0;
     public static final int BANNER_MAX_TICKS = 42;
@@ -47,22 +58,49 @@ public final class ClientBreathState {
         inhaling = payload.inhaling();
         specialDomainTicks = payload.specialDomainTicks();
         globalRecoveryTicks = payload.globalRecoveryTicks();
+        sunCycleStep = payload.sunCycleStep();
+        sunCycleTicks = payload.sunCycleTicks();
 
         if (payload.castCounter() != lastCastCounter && payload.lastCastFormOrdinal() >= 0) {
             lastCastCounter = payload.castCounter();
-            bannerForm = WaterForm.fromOrdinal(payload.lastCastFormOrdinal());
             bannerStyle = currentStyle;
             bannerTicks = BANNER_MAX_TICKS;
-            // 同步记录本地冷却预测以便 HUD 显示对应剑型的精确冷却进度条
-            WaterForm base = bannerForm == WaterForm.SECOND_LATERAL_WHEEL ? WaterForm.SECOND_WATER_WHEEL
-                    : (bannerForm == WaterForm.SEVENTH_DROP_RIPPLE_CURVE ? WaterForm.SEVENTH_DROP_RIPPLE : bannerForm);
-            predictedCooldowns[base.ordinal()] = base.getCooldownTicks();
+            if (currentStyle == BreathingStyle.SUN) {
+                bannerSunForm = SunForm.fromOrdinal(payload.lastCastFormOrdinal());
+                bannerWaterForm = null;
+                if (sunCycleStep <= 0) {
+                    SunForm base = bannerSunForm == SunForm.FIRST_DANCING_FLASH ? SunForm.FIRST_DANCE : bannerSunForm;
+                    predictedSunCooldowns[base.ordinal()] = base.getCooldownTicks();
+                }
+            } else {
+                bannerWaterForm = WaterForm.fromOrdinal(payload.lastCastFormOrdinal());
+                bannerSunForm = null;
+                WaterForm base = bannerWaterForm == WaterForm.SECOND_LATERAL_WHEEL ? WaterForm.SECOND_WATER_WHEEL
+                        : (bannerWaterForm == WaterForm.SEVENTH_DROP_RIPPLE_CURVE ? WaterForm.SEVENTH_DROP_RIPPLE : bannerWaterForm);
+                predictedWaterCooldowns[base.ordinal()] = base.getCooldownTicks();
+            }
         }
     }
 
+    /** 结合客户端实时主手物品判定当前流派（切换水/日之日轮刀瞬间 0 延迟即时切皮肤与选招表！） */
+    public static BreathingStyle getEffectiveStyle() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            ItemStack main = mc.player.getMainHandItem();
+            if (SunNichirinBladeItem.isSunBlade(main)) return BreathingStyle.SUN;
+            if (WaterNichirinBladeItem.isWaterBlade(main)) return BreathingStyle.WATER;
+        }
+        return currentStyle;
+    }
+
     public static void cycleSelectedForm(int delta) {
-        int count = WaterForm.selectableCount();
-        selectedFormIndex = Math.floorMod(selectedFormIndex + delta, count);
+        if (isSunStyle()) {
+            int count = SunForm.selectableCount();
+            selectedSunFormIndex = Math.floorMod(selectedSunFormIndex + delta, count);
+        } else {
+            int count = WaterForm.selectableCount();
+            selectedWaterFormIndex = Math.floorMod(selectedWaterFormIndex + delta, count);
+        }
         formSwitchFlashTicks = 12;
     }
 
@@ -89,8 +127,15 @@ public final class ClientBreathState {
             fluxSpinTicks--;
             if (fluxSpinTicks == 0) fluxSpinStage = 0;
         }
-        for (int i = 0; i < predictedCooldowns.length; i++) {
-            if (predictedCooldowns[i] > 0) predictedCooldowns[i]--;
+        if (sunCycleTicks > 0) {
+            sunCycleTicks--;
+            if (sunCycleTicks == 0) sunCycleStep = 0;
+        }
+        for (int i = 0; i < predictedWaterCooldowns.length; i++) {
+            if (predictedWaterCooldowns[i] > 0) predictedWaterCooldowns[i]--;
+        }
+        for (int i = 0; i < predictedSunCooldowns.length; i++) {
+            if (predictedSunCooldowns[i] > 0) predictedSunCooldowns[i]--;
         }
     }
 
@@ -103,20 +148,25 @@ public final class ClientBreathState {
         inhaling = false;
         specialDomainTicks = 0;
         globalRecoveryTicks = 0;
-        selectedFormIndex = 0;
+        selectedWaterFormIndex = 0;
+        selectedSunFormIndex = 0;
         formSwitchFlashTicks = 0;
         fluxSpinStage = 0;
         fluxSpinTicks = 0;
-        for (int i = 0; i < predictedCooldowns.length; i++) predictedCooldowns[i] = 0;
+        sunCycleStep = 0;
+        sunCycleTicks = 0;
+        for (int i = 0; i < predictedWaterCooldowns.length; i++) predictedWaterCooldowns[i] = 0;
+        for (int i = 0; i < predictedSunCooldowns.length; i++) predictedSunCooldowns[i] = 0;
         lastCastCounter = 0;
-        bannerForm = null;
+        bannerWaterForm = null;
+        bannerSunForm = null;
         bannerStyle = BreathingStyle.WATER;
         bannerTicks = 0;
     }
 
-    public static BreathingStyle getCurrentStyle() { return currentStyle; }
-    public static boolean isSunStyle() { return false; }
-    public static boolean isRedBladeActive() { return false; }
+    public static BreathingStyle getCurrentStyle() { return getEffectiveStyle(); }
+    public static boolean isSunStyle() { return getEffectiveStyle() == BreathingStyle.SUN; }
+    public static boolean isRedBladeActive() { return isSunStyle() && (totalConcentration || sunCycleStep > 0); }
     public static float getBreath() { return breath; }
     public static float getDisplayBreath() { return displayBreath; }
     public static float getMaxBreath() { return maxBreath; }
@@ -124,13 +174,18 @@ public final class ClientBreathState {
     public static boolean isInhaling() { return inhaling; }
     public static int getSpecialDomainTicks() { return specialDomainTicks; }
     public static int getGlobalRecoveryTicks() { return globalRecoveryTicks; }
-    public static int getSelectedFormIndex() { return selectedFormIndex; }
-    public static WaterForm getSelectedForm() { return WaterForm.getSelectable(selectedFormIndex); }
+    public static int getSelectedFormIndex() { return isSunStyle() ? selectedSunFormIndex : selectedWaterFormIndex; }
+    public static WaterForm getSelectedForm() { return WaterForm.getSelectable(selectedWaterFormIndex); }
+    public static SunForm getSelectedSunForm() { return SunForm.getSelectable(selectedSunFormIndex); }
     public static int getFormSwitchFlashTicks() { return formSwitchFlashTicks; }
-    public static int getPredictedCooldown(WaterForm form) { return predictedCooldowns[form.ordinal()]; }
+    public static int getPredictedCooldown(WaterForm form) { return predictedWaterCooldowns[form.ordinal()]; }
+    public static int getPredictedSunCooldown(SunForm form) { return predictedSunCooldowns[form.ordinal()]; }
     public static int getFluxSpinStage() { return fluxSpinStage; }
     public static int getFluxSpinTicks() { return fluxSpinTicks; }
-    public static WaterForm getBannerForm() { return bannerForm; }
+    public static int getSunCycleStep() { return sunCycleStep; }
+    public static int getSunCycleTicks() { return sunCycleTicks; }
+    public static WaterForm getBannerForm() { return bannerWaterForm; }
+    public static SunForm getBannerSunForm() { return bannerSunForm; }
     public static BreathingStyle getBannerStyle() { return bannerStyle; }
     public static int getBannerTicks() { return bannerTicks; }
     public static boolean isShowGuide() { return showGuide; }

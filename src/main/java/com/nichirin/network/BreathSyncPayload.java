@@ -18,7 +18,9 @@ public record BreathSyncPayload(
         int specialDomainTicks,
         int globalRecoveryTicks,
         int lastCastFormOrdinal,
-        int castCounter
+        int castCounter,
+        int sunCycleStep,
+        int sunCycleTicks
 ) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<BreathSyncPayload> TYPE =
@@ -38,9 +40,12 @@ public record BreathSyncPayload(
                     int globalRecoveryTicks = buf.readVarInt();
                     int lastCastFormOrdinal = buf.readVarInt();
                     int castCounter = buf.readVarInt();
+                    int sunCycleStep = buf.readVarInt();
+                    int sunCycleTicks = buf.readVarInt();
                     return new BreathSyncPayload(
                             styleId, breath, maxBreath, totalConc, inhaling,
-                            specialTicks, globalRecoveryTicks, lastCastFormOrdinal, castCounter
+                            specialTicks, globalRecoveryTicks, lastCastFormOrdinal, castCounter,
+                            sunCycleStep, sunCycleTicks
                     );
                 }
 
@@ -57,6 +62,8 @@ public record BreathSyncPayload(
                     buf.writeVarInt(p.globalRecoveryTicks);
                     buf.writeVarInt(p.lastCastFormOrdinal);
                     buf.writeVarInt(p.castCounter);
+                    buf.writeVarInt(p.sunCycleStep);
+                    buf.writeVarInt(p.sunCycleTicks);
                 }
             };
 

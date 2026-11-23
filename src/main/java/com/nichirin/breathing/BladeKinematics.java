@@ -40,6 +40,22 @@ public final class BladeKinematics {
     /** 16: 捌之型·泷壶 原版垂直瀑布重劈（举刀登顶 -> 175° 垂直天降劈地！） */
     public static final int ANIM_WATERFALL_CLEAVE = 16;
 
+    // ==================== 日之呼吸 · 火之神神乐 专属剑舞运动学编号（17..23） ====================
+    /** 17: 日·碧罗之天（由下而上 360° 垂直升天大炎轮挑斩，与水车方向相反！） */
+    public static final int ANIM_SUN_CLEAR_BLUE_SKY = 17;
+    /** 18: 日·烈日红镜（左右「∞」字高速交叉双弧火焰斩！） */
+    public static final int ANIM_SUN_RAGING_SUN = 18;
+    /** 19: 日·斜阳转身（腾空 180° 倒立逆转身体自上而下奇袭横斩！） */
+    public static final int ANIM_SUN_SETTING_SUN = 19;
+    /** 20: 日·飞轮阳炎（超长 7.4 格晃动扭曲阳炎热浪延伸斩！） */
+    public static final int ANIM_SUN_HEAT_HAZE = 20;
+    /** 21: 日·炎舞（paramInt=0 横扫重斩 / paramInt=1 回旋烈焰追劈二连击！） */
+    public static final int ANIM_SUN_FLAME_DANCE = 21;
+    /** 22: 日·日晕之龙·头舞（paramInt=0..3 四段狂舞高速游龙交替大弧斩！） */
+    public static final int ANIM_SUN_HALO_DRAGON_DASH = 22;
+    /** 23: 日·圆舞一闪（融合雷呼瞬步的超高速前突宽幅瞬闪圆斩！） */
+    public static final int ANIM_SUN_DANCING_FLASH = 23;
+
     /** 每服务端 tick 细分为 7 个物理子步（20 TPS * 7 = 140Hz 连续刀刃扫描，彻底杜绝快刀跳帧穿模！） */
     public static final int SWEEP_SUB_STEPS = 7;
 
@@ -249,14 +265,107 @@ public final class BladeKinematics {
                 return new BladeSegment(base, tip, true, 0.96F);
             }
             case ANIM_WATERFALL_CLEAVE -> {
-                // 捌之型·泷壶 原版重做：高举刀锋过顶 -> 175° 垂直天降瀑布劈地！
+                // 捌之型·泷壶 / 日·辉辉恩光：高举刀锋过顶 -> 175° 垂直天降劈地！（日呼带螺旋偏移）
                 if (t < 0.16F || t > 0.84F) return BladeSegment.INACTIVE;
                 float u = whipCurve((t - 0.16F) / 0.56F);
                 float pitchRad = Mth.lerp(u, 96.0F, -64.0F) * Mth.DEG_TO_RAD;
-                Vec3 dir = fwd.scale(Mth.cos(pitchRad)).add(up.scale(Mth.sin(pitchRad))).normalize();
+                float spiralYaw = sun ? Mth.sin(u * Mth.TWO_PI) * 32.0F : 0.0F;
+                Vec3 hFwd = sun ? rotateHorizontal(fwd, right, spiralYaw) : fwd;
+                Vec3 dir = hFwd.scale(Mth.cos(pitchRad)).add(up.scale(Mth.sin(pitchRad))).normalize();
                 Vec3 base = new Vec3(px, py + 0.30, pz).add(dir.scale(0.95 * tcReach)).add(right.scale(0.16));
-                Vec3 tip = new Vec3(px, py + 0.30, pz).add(dir.scale(4.95 * tcReach)).add(right.scale(0.16));
+                Vec3 tip = new Vec3(px, py + 0.30, pz).add(dir.scale((sun ? 5.25 : 4.95) * tcReach)).add(right.scale(0.16));
+                return new BladeSegment(base, tip, true, sun ? 1.38F : 1.32F);
+            }
+            case ANIM_SUN_CLEAR_BLUE_SKY -> {
+                // 日·碧罗之天：由下而上 375° 垂直升天大炎轮（起点在斜下方，逆时针向高空猛烈挑斩划圆！）
+                if (t < 0.10F) return BladeSegment.INACTIVE;
+                float u = snapOut((t - 0.10F) / 0.90F);
+                float rad = (-82.0F + u * 375.0F) * Mth.DEG_TO_RAD;
+                Vec3 dir = fwd.scale(Mth.cos(rad)).add(up.scale(Mth.sin(rad))).normalize();
+                double innerR = 1.15 * tcReach;
+                double outerR = 4.65 * tcReach;
+                Vec3 base = new Vec3(px, py + 0.25, pz).add(dir.scale(innerR)).add(right.scale(0.16));
+                Vec3 tip = new Vec3(px, py + 0.25, pz).add(dir.scale(outerR)).add(right.scale(0.16));
+                return new BladeSegment(base, tip, true, 1.30F);
+            }
+            case ANIM_SUN_RAGING_SUN -> {
+                // 日·烈日红镜：左右高速「∞」字双弧交叉火焰斩（0.10..0.48 右→左高弧，0.52..0.90 左→右逆弧！）
+                if (t < 0.10F || t > 0.92F || (t > 0.48F && t < 0.52F)) return BladeSegment.INACTIVE;
+                boolean secondArc = t >= 0.52F;
+                float u = secondArc
+                        ? whipCurve((t - 0.52F) / 0.40F)
+                        : whipCurve((t - 0.10F) / 0.38F);
+                float angDeg = secondArc ? Mth.lerp(u, 134.0F, -134.0F) : Mth.lerp(u, -134.0F, 134.0F);
+                double arcY = (secondArc ? -1.0 : 1.0) * Mth.sin(u * Mth.TWO_PI) * 0.52 + (secondArc ? 0.18 : -0.06);
+                Vec3 dir = rotateHorizontal(fwd, right, angDeg);
+                Vec3 base = new Vec3(px, py + arcY * 0.45, pz).add(dir.scale(1.15 * tcReach));
+                Vec3 tip = new Vec3(px, py + arcY, pz).add(dir.scale(4.95 * tcReach));
+                return new BladeSegment(base, tip, true, 1.28F);
+            }
+            case ANIM_SUN_SETTING_SUN -> {
+                // 日·斜阳转身：凌空倒转身体后自高处水平回旋 285° 烈焰奇袭横斩！
+                if (t < 0.18F || t > 0.86F) return BladeSegment.INACTIVE;
+                float u = whipCurve((t - 0.18F) / 0.62F);
+                float angDeg = Mth.lerp(u, 145.0F, -140.0F);
+                double slashY = Mth.lerp(u, 0.58, -0.32);
+                Vec3 dir = rotateHorizontal(fwd, right, angDeg);
+                Vec3 base = new Vec3(px, py + slashY * 0.50, pz).add(dir.scale(1.10 * tcReach));
+                Vec3 tip = new Vec3(px, py + slashY, pz).add(dir.scale(5.25 * tcReach));
+                return new BladeSegment(base, tip, true, 1.34F);
+            }
+            case ANIM_SUN_HEAT_HAZE -> {
+                // 日·飞轮阳炎：刀刃缠绕晃动热浪，视觉与判定延伸至 7.35 格超远阳炎破防斩！
+                if (t < 0.14F || t > 0.80F) return BladeSegment.INACTIVE;
+                float u = whipCurve((t - 0.14F) / 0.58F);
+                float angDeg = Mth.lerp(u, -118.0F, 118.0F);
+                // 阳炎热浪高频微颤，营造“刀身时短时长、视觉捉摸不透”的光学错觉
+                double shimmer = 0.52 * Mth.sin(u * Mth.TWO_PI * 3.5F);
+                Vec3 dir = rotateHorizontal(fwd, right, angDeg);
+                double outerR = (6.85 + shimmer) * tcReach;
+                double waveY = 0.24 * Mth.cos(u * Mth.TWO_PI * 2.0F);
+                Vec3 base = new Vec3(px, py + waveY * 0.35, pz).add(dir.scale(1.15 * tcReach));
+                Vec3 tip = new Vec3(px, py + waveY, pz).add(dir.scale(outerR));
                 return new BladeSegment(base, tip, true, 1.32F);
+            }
+            case ANIM_SUN_FLAME_DANCE -> {
+                // 日·炎舞：二连击（paramInt=0 宽幅斜挑重斩 / paramInt=1 回旋反手炽炎追劈！）
+                if (t < 0.08F || t > 0.88F) return BladeSegment.INACTIVE;
+                boolean secondHit = (paramInt & 1) != 0;
+                float u = whipCurve((t - 0.08F) / 0.72F);
+                float angDeg = secondHit ? Mth.lerp(u, 136.0F, -138.0F) : Mth.lerp(u, -126.0F, 130.0F);
+                double yB = secondHit ? Mth.lerp(u, 0.45, -0.35) : Mth.lerp(u, -0.32, 0.35);
+                double yT = secondHit ? Mth.lerp(u, 0.92, -0.68) : Mth.lerp(u, -0.62, 0.78);
+                Vec3 dir = rotateHorizontal(fwd, right, angDeg);
+                double outerR = (secondHit ? 5.55 : 4.95) * tcReach;
+                Vec3 base = new Vec3(px, py + yB, pz).add(dir.scale(1.10 * tcReach));
+                Vec3 tip = new Vec3(px, py + yT, pz).add(dir.scale(outerR));
+                return new BladeSegment(base, tip, true, secondHit ? 1.38F : 1.24F);
+            }
+            case ANIM_SUN_HALO_DRAGON_DASH -> {
+                // 日·日晕之龙·头舞：高速游龙 4 段交替狂舞穿斩（每段大跨度龙牙挥弧！）
+                if (t < 0.06F || t > 0.94F) return BladeSegment.INACTIVE;
+                int step = Math.floorMod(paramInt, 4);
+                float u = snapOut((t - 0.06F) / 0.84F);
+                float side = (step % 2 == 0) ? 1.0F : -1.0F;
+                float angDeg = Mth.lerp(u, -136.0F * side, 140.0F * side);
+                double yT = (step == 3)
+                        ? Mth.sin(u * Mth.PI) * 0.42
+                        : Mth.lerp(u, -0.65 * side, 0.75 * side);
+                Vec3 dir = rotateHorizontal(fwd, right, angDeg);
+                double outerR = (step == 3 ? 5.85 : 5.05) * tcReach;
+                Vec3 base = new Vec3(px, py + yT * 0.42, pz).add(dir.scale(1.05 * tcReach));
+                Vec3 tip = new Vec3(px, py + yT, pz).add(dir.scale(outerR));
+                return new BladeSegment(base, tip, true, step == 3 ? 1.42F : 1.30F);
+            }
+            case ANIM_SUN_DANCING_FLASH -> {
+                // 日·圆舞一闪：雷步爆发瞬闪 -> 极速 280° 拉长圆舞断首弧！
+                if (t < 0.08F || t > 0.72F) return BladeSegment.INACTIVE;
+                float u = snapOut((t - 0.08F) / 0.48F);
+                float angDeg = Mth.lerp(u, -142.0F, 142.0F);
+                Vec3 dir = rotateHorizontal(fwd, right, angDeg);
+                Vec3 base = new Vec3(px, py + 0.05, pz).add(dir.scale(1.15 * tcReach));
+                Vec3 tip = new Vec3(px, py + 0.14, pz).add(dir.scale(5.75 * tcReach));
+                return new BladeSegment(base, tip, true, 1.38F);
             }
             default -> {
                 return BladeSegment.INACTIVE;

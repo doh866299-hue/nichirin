@@ -10,7 +10,7 @@ authors="${mod_authors}"
 enumExtensions="META-INF/enumextensions.json"
 description='''
 Demon Slayer (Kimetsu no Yaiba) Breathing Styles mod for Minecraft 26.3 (NeoForge).
-Features a 3D Nichirin Blade, all 11 canon Water Breathing forms (including hold-to-spin Constant Flux with a 3D sculpted ukiyo-e Water Dragon), Total Concentration Breathing, Opening Thread, and high-refresh-rate combat physics. Zero external dependencies.
+Features separate 3D Water & Sun Nichirin Blades, all 11 canon Water Breathing forms (hold-to-spin Constant Flux with a 3D ukiyo-e Water Dragon), all 13 canon Sun Breathing / Hinokami Kagura forms (Crimson Red Blade, Anti-Heal Scorch, Fake Rainbow afterimage, Dragon Sun Halo blitz & endless Thirteenth Form cycle), Total Concentration Breathing, Opening Thread, and high-refresh-rate combat physics. Zero external dependencies.
 Note: Almost entirely built with AI assistance, made purely for fun.
 '''
 
